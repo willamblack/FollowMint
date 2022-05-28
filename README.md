@@ -1,4 +1,4 @@
-# FolowerMint
+# FollowMint
 
 编辑config.json里的参数：
 
