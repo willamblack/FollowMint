@@ -15,11 +15,11 @@ configExample = {
     "maxGasPrice": 50,
     "maxGasLimit": 1000000,
     "follow": {
-        "0x8888887a5e2491fec904d90044e6cd6c69f1e71c":{"start": 0, "end": 24},
-        "0x555555B63d1C3A8c09FB109d2c80464685Ee042B":{"start": 18, "end": 6},
-        "0x99999983c70de9543cdc11dB5DE66A457d241e8B":{"start": 8, "end": 20}
+        "0x8888887a5e2491fec904d90044e6cd6c69f1e71c": {"start": 0, "end": 24},
+        "0x555555B63d1C3A8c09FB109d2c80464685Ee042B": {"start": 18, "end": 6},
+        "0x99999983c70de9543cdc11dB5DE66A457d241e8B": {"start": 8, "end": 20}
     },
-    "blacklist":["Ape", "Bear", "Duck", "Pixel", "Not", "Okay", "Woman", "Baby", "Goblin", "Ai"]
+    "blacklist": ["Ape", "Bear", "Duck", "Pixel", "Not", "Okay", "Woman", "Baby", "Goblin", "Ai"]
 }
 std_out_handle = ctypes.windll.kernel32.GetStdHandle(-11)
 
@@ -108,7 +108,9 @@ async def txn_handler(txn, unsubscribe):
             starttime = int(follows[follow]['start'])
             endtime = int(follows[follow]['end'])
             tm_hour = time.localtime().tm_hour
-            if tm_hour < starttime or tm_hour > endtime:
+            if tm_hour >= starttime or tm_hour < endtime:
+                pass
+            else:
                 print_yellow("非Mint时间，跳过")
                 return
     if value != '0':
