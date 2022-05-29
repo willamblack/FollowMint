@@ -5,6 +5,7 @@ web3，blocknative-sdk，requests
 # FollowMint
 
 选一个狗王，跟着狗王，狗王mint啥软件自动帮你mint啥
+
 已经自动排除非mint交易，非免费交易，已做模拟交易，模拟成功的才发送
 
 
@@ -26,7 +27,9 @@ follow：需要跟随的狗王地址
 
 # 已打包的exe
 https://github.com/Fooyao/FollowMint/releases
+
 监控开始，又闪退的，是网络连不上blocknative，不行就用香港VPS跑，
+
 直接提示错误的，应该是配置文件错误
 
 # 推特
