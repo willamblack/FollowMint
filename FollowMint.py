@@ -31,7 +31,9 @@ def getMethodName(methodSignature):
             return methodNameList[methodSignature]
         res = requests.get('https://www.4byte.directory/api/v1/signatures/?hex_signature=' + methodSignature)
         if res.status_code == 200:
+            print(res.json())
             methodName = res.json()['results'][0]['text_signature'].split('(')[0].lower()
+            print(methodName)
             if 'mint' in methodName:
                 methodNameList[methodSignature] = True
                 return True
@@ -46,6 +48,7 @@ async def txn_handler(txn, unsubscribe):
     from_address = txn['from']
     to_address = w3.toChecksumAddress(to_address)
     gasPrice = txn['gasPrice']
+    gasPrice = int(gasPrice)
     inputData = txn['input']
     value = txn['value']
     if value != '0':
@@ -55,7 +58,6 @@ async def txn_handler(txn, unsubscribe):
         print("mint过，跳过")
         return
     inputData = inputData.replace(from_address[2:].lower(), account.address[2:].lower())
-    getMethodName(inputData[:10])
     if not getMethodName(inputData[:10]):
         print('可能不是mint交易,跳过')
         return
@@ -67,7 +69,7 @@ async def txn_handler(txn, unsubscribe):
         'chainId': chainId,
         'to': to_address,
         'gas': 2000000,
-        'gasPrice': int(gasPrice),
+        'gasPrice': gasPrice,
         'nonce': w3.eth.getTransactionCount(account.address),
         'data': inputData
     }
@@ -98,13 +100,18 @@ async def txn_handler(txn, unsubscribe):
 
 
 def main():
-    stream = Stream(blocknativeKey)
-    filters = [{"status": "pending"}]
-    print(account.address)
-    print('开始监控')
-    for follow in follows:
-        stream.subscribe_address(follow, txn_handler, filters)
-    stream.connect()
+    try:
+        stream = Stream(blocknativeKey)
+        filters = [{"status": "pending"}]
+        print(account.address)
+        print('开始监控')
+        for follow in follows:
+            stream.subscribe_address(follow, txn_handler, filters)
+        stream.connect()
+    except Exception as e:
+        print(str(e))
+        time.sleep(10)
+        
 
 
 if __name__ == '__main__':
@@ -112,21 +119,25 @@ if __name__ == '__main__':
         print('请先配置config.json')
         file = open('config.json', 'w')
         file.write(json.dumps(configExample))
+        file.close()
         time.sleep(10)
-        exit()
-    file = open('config.json', 'r')
-    config = json.loads(file.read())
-    RPC = config['RPC']
-    privateKey = config['privateKey']
-    blocknativeKey = config['blocknativeKey']
-    barkKey = config['barkKey']
-    follows = config['follow']
-    w3 = Web3(Web3.HTTPProvider(RPC))
-    maxGasPrice = config['maxGasPrice']
-    maxGasPrice = w3.toWei(maxGasPrice, 'gwei')
-    maxGasLimit = int(config['maxGasLimit'])
-    chainId = w3.eth.chainId
-    account = w3.eth.account.privateKeyToAccount(privateKey)
-    mintadd = []
-    methodNameList = {}
-    main()
+    try:
+        file = open('config.json', 'r')
+        config = json.loads(file.read())
+        RPC = config['RPC']
+        privateKey = config['privateKey']
+        blocknativeKey = config['blocknativeKey']
+        barkKey = config['barkKey']
+        follows = config['follow']
+        w3 = Web3(Web3.HTTPProvider(RPC))
+        maxGasPrice = config['maxGasPrice']
+        maxGasPrice = w3.toWei(maxGasPrice, 'gwei')
+        maxGasLimit = int(config['maxGasLimit'])
+        chainId = w3.eth.chainId
+        account = w3.eth.account.privateKeyToAccount(privateKey)
+        mintadd = []
+        methodNameList = {}
+        main()
+    except Exception as e:
+        print(str(e))
+        time.sleep(10)
