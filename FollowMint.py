@@ -15,10 +15,11 @@ configExample = {
     "maxGasPrice": 50,
     "maxGasLimit": 1000000,
     "follow": {
-        "0x8888887a5e2491fec904d90044e6cd6c69f1e71c":{"start": 18, "end": 6},
-        "0x555555B63d1C3A8c09FB109d2c80464685Ee042B":{"start": 0, "end": 24},
+        "0x8888887a5e2491fec904d90044e6cd6c69f1e71c":{"start": 0, "end": 24},
+        "0x555555B63d1C3A8c09FB109d2c80464685Ee042B":{"start": 18, "end": 6},
         "0x99999983c70de9543cdc11dB5DE66A457d241e8B":{"start": 8, "end": 20}
-    }
+    },
+    "blacklist":["Ape","Bear","Duck","Pixel","Not","Okay","Woman","Baby","Goblin","Ai"]
 }
 std_out_handle = ctypes.windll.kernel32.GetStdHandle(-11)
 
@@ -91,6 +92,16 @@ async def txn_handler(txn, unsubscribe):
     gasPrice = int(gasPrice)
     inputData = txn['input']
     value = txn['value']
+    NFTcon = w3.eth.contract(address=to_address, abi=[nameabi])
+    try:
+        name = NFTcon.functions.name().call()
+        for black in blacklist:
+            if black.lower() in name.lower():
+                print_yellow(name + "黑名单，跳过")
+                return
+    except:
+        print_yellow('获取NFT名称失败，跳过')
+        return
     for follow in follows:
         if follow.lower() == from_address.lower():
             starttime = int(follows[follow]['start'])
@@ -173,9 +184,17 @@ if __name__ == '__main__':
         config = json.loads(file.read())
         RPC = config['RPC']
         privateKey = config['privateKey']
+        blacklist = config['blacklist']
         blocknativeKey = config['blocknativeKey']
         barkKey = config['barkKey']
         follows = config['follow']
+        nameabi = {
+            'inputs': [],
+            'name': 'name',
+            'outputs': [{'internalType': 'string', 'name': '', 'type': 'string'}],
+            'stateMutability': 'view',
+            'type': 'function'
+        }
         if type(follows) == list:
             print_red('请重新配置follow起始时间，配置文件模板已更新')
             followsDict = {}
