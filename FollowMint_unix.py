@@ -68,8 +68,14 @@ async def txn_handler(txn, unsubscribe):
     to_address = txn['to']
     from_address = txn['from']
     to_address = w3.toChecksumAddress(to_address)
-    gasPrice = txn['gasPrice']
-    gasPrice = int(gasPrice)
+    gasPrice = 0
+    maxFeePerGas = 0
+    maxPriorityFeePerGas = 0
+    if 'gasPrice' in txn:
+        gasPrice = int(txn['gasPrice'])
+    else:
+        maxFeePerGas = int(txn['maxFeePerGas'])
+        maxPriorityFeePerGas = int(txn['maxPriorityFeePerGas'])
     inputData = txn['input']
     value = txn['value']
     print_yellow(from_address + "监控到新交易")
@@ -103,7 +109,8 @@ async def txn_handler(txn, unsubscribe):
     if not getMethodName(inputData[:10]):
         print_yellow('可能不是mint交易,跳过')
         return
-    if gasPrice > maxGasPrice:
+
+    if gasPrice > maxGasPrice or maxFeePerGas > 0 :
         print_yellow('gasPrice过高,跳过')
         return
     transaction = {
@@ -111,10 +118,14 @@ async def txn_handler(txn, unsubscribe):
         'chainId': chainId,
         'to': to_address,
         'gas': 2000000,
-        'gasPrice': gasPrice,
         'nonce': w3.eth.getTransactionCount(account.address),
         'data': inputData
     }
+    if gasPrice > 10000:
+        transaction['gasPrice'] = gasPrice
+    else:
+        transaction['maxFeePerGas'] = maxFeePerGas
+        transaction['maxPriorityFeePerGas'] = maxPriorityFeePerGas
     try:
         estimateGas = w3.eth.estimateGas(transaction)
         if estimateGas > maxGasLimit:
