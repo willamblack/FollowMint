@@ -20,6 +20,21 @@ configExample = {
 }
 
 
+def print_green(message):
+    stime = time.strftime("%m-%d %H:%M:%S", time.localtime())
+    print(f'[{stime}] \033[1;32m{message}\033[0m')
+
+
+def print_red(message):
+    stime = time.strftime("%m-%d %H:%M:%S", time.localtime())
+    print(f'[{stime}] \033[1;31m{message}\033[0m')
+
+
+def print_blue(message):
+    stime = time.strftime("%m-%d %H:%M:%S", time.localtime())
+    print(f'[{stime}] \033[1;34m{message}\033[0m')
+
+
 def bark(info, data):
     if barkKey != '':
         requests.get('https://api.day.app/' + barkKey + '/' + info + '?url=' + data)
@@ -31,9 +46,8 @@ def getMethodName(methodSignature):
             return methodNameList[methodSignature]
         res = requests.get('https://www.4byte.directory/api/v1/signatures/?hex_signature=' + methodSignature)
         if res.status_code == 200:
-            print(res.json())
             methodName = res.json()['results'][0]['text_signature'].split('(')[0].lower()
-            print(methodName)
+            print_blue(res.json()['results'][0]['text_signature'])
             if 'mint' in methodName:
                 methodNameList[methodSignature] = True
                 return True
@@ -52,17 +66,17 @@ async def txn_handler(txn, unsubscribe):
     inputData = txn['input']
     value = txn['value']
     if value != '0':
-        print("非免费，跳过")
+        print_blue("非免费，跳过")
         return
     if to_address in mintadd:
-        print("mint过，跳过")
+        print_blue("mint过，跳过")
         return
     inputData = inputData.replace(from_address[2:].lower(), account.address[2:].lower())
     if not getMethodName(inputData[:10]):
-        print('可能不是mint交易,跳过')
+        print_blue('可能不是mint交易,跳过')
         return
     if gasPrice > maxGasPrice:
-        print('gasPrice过高,跳过')
+        print_blue('gasPrice过高,跳过')
         return
     transaction = {
         'from': account.address,
@@ -76,26 +90,26 @@ async def txn_handler(txn, unsubscribe):
     try:
         estimateGas = w3.eth.estimateGas(transaction)
         if estimateGas > maxGasLimit:
-            print('超过gasLimit上限，跳过')
+            print_blue('超过gasLimit上限，跳过')
             return
         transaction['gas'] = estimateGas
         signed = w3.eth.account.sign_transaction(transaction, privateKey)
         new_raw = signed.rawTransaction.hex()
         if to_address in mintadd:
-            print("mint过，跳过")
+            print_blue("mint过，跳过")
             return
         tx_hash = w3.eth.sendRawTransaction(new_raw)
         mintadd.append(to_address)
-        print("mint交易发送成功" + w3.toHex(tx_hash))
-        freceipt = w3.eth.waitForTransactionReceipt(tx_hash, 300000)
+        print_green("mint交易发送成功" + w3.toHex(tx_hash))
+        freceipt = w3.eth.waitForTransactionReceipt(tx_hash, 600)
         if freceipt.status == 1:
-            print("mint成功")
+            print_green("mint成功")
             bark('mint成功', 'https://cn.etherscan.com/tx/' + w3.toHex(tx_hash))
         else:
-            print("mint失败")
+            print_green("mint失败")
             bark('mint失败', 'https://cn.etherscan.com/tx/' + w3.toHex(tx_hash))
     except:
-        print('预测失败，跳过')
+        print_blue('预测失败，跳过')
         return
 
 
@@ -103,20 +117,19 @@ def main():
     try:
         stream = Stream(blocknativeKey)
         filters = [{"status": "pending"}]
-        print(account.address)
-        print('开始监控')
+        print_blue(account.address)
+        print_blue('开始监控')
         for follow in follows:
             stream.subscribe_address(follow, txn_handler, filters)
         stream.connect()
     except Exception as e:
-        print(str(e))
+        print_red(str(e))
         time.sleep(10)
-        
 
 
 if __name__ == '__main__':
     if not os.path.exists('config.json'):
-        print('请先配置config.json')
+        print_blue('请先配置config.json')
         file = open('config.json', 'w')
         file.write(json.dumps(configExample))
         file.close()
@@ -139,5 +152,5 @@ if __name__ == '__main__':
         methodNameList = {}
         main()
     except Exception as e:
-        print(str(e))
+        print_red(str(e))
         time.sleep(10)
