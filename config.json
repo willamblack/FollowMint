@@ -5,9 +5,10 @@
   "barkKey": "",
   "maxGasPrice": 50,
   "maxGasLimit": 1000000,
-  "follow": [
-    "0x8888887a5e2491fec904d90044e6cd6c69f1e71c",
-    "0x555555B63d1C3A8c09FB109d2c80464685Ee042B",
-    "0x99999983c70de9543cdc11dB5DE66A457d241e8B"
-  ]
+  "follow": {
+        "0x8888887a5e2491fec904d90044e6cd6c69f1e71c": {"start": 18, "end": 6},
+        "0x555555B63d1C3A8c09FB109d2c80464685Ee042B": {"start": 0, "end": 24},
+        "0x99999983c70de9543cdc11dB5DE66A457d241e8B": {"start": 8, "end": 20}
+    },
+    "blacklist": ["Ape", "Bear", "Duck", "Pixel", "Not", "Okay", "Woman", "Baby", "Goblin", "Ai"]
 }
