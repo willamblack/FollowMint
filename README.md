@@ -1,5 +1,9 @@
 # FollowMint
 
+选一个狗王，跟着狗王，狗王mint啥软件自动帮你mint啥
+已经自动排除非mint交易，非免费交易，已做模拟交易，模拟成功的才发送
+
+
 编辑config.json里的参数：
 
 RPC：ETH节点RPC
