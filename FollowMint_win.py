@@ -130,7 +130,7 @@ async def txn_handler(txn, unsubscribe):
         print_yellow('可能不是mint交易,跳过')
         return
 
-    if gasPrice > maxGasPrice or maxFeePerGas > 0 :
+    if gasPrice > maxGasPrice or maxFeePerGas > maxGasPrice:
         print_yellow('gasPrice过高,跳过')
         return
     transaction = {
