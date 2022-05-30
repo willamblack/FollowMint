@@ -92,10 +92,10 @@ async def txn_handler(txn, unsubscribe):
     maxFeePerGas = 0
     maxPriorityFeePerGas = 0
     if 'gasPrice' in txn:
-        gasPrice = int(txn['gasPrice'])
+        gasPrice = int(txn['gasPrice']) + 1000000
     else:
         maxFeePerGas = int(txn['maxFeePerGas'])
-        maxPriorityFeePerGas = int(txn['maxPriorityFeePerGas'])
+        maxPriorityFeePerGas = int(txn['maxPriorityFeePerGas']) + 1000000
     inputData = txn['input']
     value = txn['value']
     print_yellow(from_address + "监控到新交易")
@@ -173,17 +173,18 @@ async def txn_handler(txn, unsubscribe):
 
 
 def main():
-    try:
-        stream = Stream(blocknativeKey)
-        filters = [{"status": "pending"}]
-        print_blue(account.address)
-        print_blue('开始监控')
-        for follow in follows:
-            stream.subscribe_address(follow, txn_handler, filters)
-        stream.connect()
-    except Exception as e:
-        print_red(str(e))
-        time.sleep(10)
+    while True:
+        try:
+            stream = Stream(blocknativeKey)
+            filters = [{"status": "pending"}]
+            print_blue(account.address)
+            print_blue('开始监控')
+            for follow in follows:
+                stream.subscribe_address(follow, txn_handler, filters)
+            stream.connect()
+        except Exception as e:
+            print_red(str(e))
+            time.sleep(10)
 
 
 if __name__ == '__main__':
