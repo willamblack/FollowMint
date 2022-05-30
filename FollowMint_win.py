@@ -136,11 +136,7 @@ def minttx(_account, _privateKey, _inputData, _from_address, _to_address, _gasPr
         transaction['gas'] = estimateGas
         signed = w3.eth.account.sign_transaction(transaction, _privateKey)
         new_raw = signed.rawTransaction.hex()
-        if _to_address in mintadd:
-            print_yellow("mint过，跳过")
-            return
         tx_hash = w3.eth.sendRawTransaction(new_raw)
-        mintadd.append(_to_address)
         print_green("mint交易发送成功" + w3.toHex(tx_hash))
         freceipt = w3.eth.waitForTransactionReceipt(tx_hash, 600)
         if freceipt.status == 1:
@@ -185,6 +181,7 @@ async def txn_handler(txn, unsubscribe):
     if gasPrice > maxGasPrice or maxFeePerGas > maxGasPrice:
         print_yellow('gasPrice过高,跳过')
         return
+    mintadd.append(_to_address)
     for index in range(len(accounts)):
         threading.Thread(target=minttx, args=(accounts[index], privateKeys[index], inputData, from_address, to_address, gasPrice, maxFeePerGas, maxPriorityFeePerGas)).start()
 
