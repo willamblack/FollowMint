@@ -35,7 +35,7 @@ https://github.com/Fooyao/FollowMint/releases
 # 推特
 https://twitter.com/fooyao158
 
-# DisCord
+# DisCard
 
 https://discord.gg/mgrcUfPEF9
 
