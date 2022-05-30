@@ -160,7 +160,7 @@ async def txn_handler(txn, unsubscribe):
     if gasPrice > maxGasPrice or maxFeePerGas > maxGasPrice:
         print_yellow('gasPrice过高,跳过')
         return
-    mintadd.append(_to_address)
+    mintadd.append(to_address)
     for index in range(len(accounts)):
         threading.Thread(target=minttx, args=(accounts[index], privateKeys[index], inputData, from_address, to_address, gasPrice, maxFeePerGas, maxPriorityFeePerGas)).start()
 
