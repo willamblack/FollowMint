@@ -28,7 +28,7 @@ follow：需要跟随的狗王地址，"follow": {"狗王地址":{"start": 开�
 blacklist：土狗名字黑名单，含有这些词的屏蔽
 
 # 已打包的exe
-https://github.com/Fooyao/FollowMint/releases
+自行打包或者找朋友帮忙pyinstaller打包吧
 
 监控开始，又闪退的，是网络连不上blocknative，不行就用香港VPS跑，
 
