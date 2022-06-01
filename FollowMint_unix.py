@@ -4,6 +4,7 @@ import time
 import requests
 from blocknative.stream import Stream
 from web3 import Web3
+from eth_abi import decode_abi
 import os
 
 configExample = {
@@ -49,19 +50,22 @@ def bark(info, data):
 
 def getMethodName(methodSignature):
     try:
-        if methodSignature in methodNameList:
-            return methodNameList[methodSignature]
+        if methodSignature in methodNameDict:
+            print_yellow(methodNameDict[methodSignature]['method'])
+            return methodNameDict[methodSignature]['isMint'], methodNameDict[methodSignature]['method']
         res = requests.get('https://www.4byte.directory/api/v1/signatures/?hex_signature=' + methodSignature)
         if res.status_code == 200:
-            methodName = res.json()['results'][0]['text_signature'].split('(')[0].lower()
-            print_yellow(res.json()['results'][0]['text_signature'])
+            method = res.json()['results'][0]['text_signature']
+            methodName = method.split('(')[0].lower()
+            print_yellow(method)
             if 'mint' in methodName:
-                methodNameList[methodSignature] = True
-                return True
-        methodNameList[methodSignature] = False
-        return False
+                methodNameDict[methodSignature] = {'method': method, 'isMint': True}
+                return True, method
+            else:
+                methodNameDict[methodSignature] = {'method': method, 'isMint': False}
+        return False, None
     except:
-        return False
+        return False, None
 
 
 def isBlackList(_to):
@@ -69,7 +73,7 @@ def isBlackList(_to):
         NFTcon = w3.eth.contract(address=_to, abi=[nameabi])
         name = NFTcon.functions.name().call()
         for black in blacklist:
-            if black.lower() in name.lower():
+            if black in name:
                 print_yellow(name + "黑名单，跳过")
                 return False
     except:
@@ -92,40 +96,49 @@ def isMintTime(_from):
     return True
 
 
-def minttx(_account, _privateKey, _inputData, _from_address, _to_address, _gasPrice, _maxFeePerGas, _maxPriorityFeePerGas):
-    _inputData = _inputData.replace(_from_address[2:].lower(), _account.address[2:].lower())
-    transaction = {
-        'from': _account.address,
-        'chainId': chainId,
-        'to': _to_address,
-        'gas': 2000000,
-        'nonce': w3.eth.getTransactionCount(_account.address),
-        'data': _inputData
-    }
-    if _gasPrice > 10000:
-        transaction['gasPrice'] = _gasPrice
-    else:
-        transaction['maxFeePerGas'] = _maxFeePerGas
-        transaction['maxPriorityFeePerGas'] = _maxPriorityFeePerGas
+def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_address, _gasPrice, _maxFeePerGas, _maxPriorityFeePerGas):
     try:
-        estimateGas = w3.eth.estimateGas(transaction)
-        if estimateGas > maxGasLimit:
-            print_yellow('超过gasLimit上限，跳过')
-            return
-        transaction['gas'] = estimateGas
-        signed = w3.eth.account.sign_transaction(transaction, _privateKey)
-        new_raw = signed.rawTransaction.hex()
-        tx_hash = w3.eth.sendRawTransaction(new_raw)
-        print_green("mint交易发送成功" + w3.toHex(tx_hash))
-        freceipt = w3.eth.waitForTransactionReceipt(tx_hash, 600)
-        if freceipt.status == 1:
-            print_green("mint成功")
-            bark('mint成功', 'https://cn.etherscan.com/tx/' + w3.toHex(tx_hash))
+        abi = _method.split('(')[1][:-1].split(',')
+        if len(abi) != 0 and 'address' in abi:
+            params = decode_abi(['uint256', 'address'], bytes.fromhex(_inputData[10:]))
+            for index in range(len(abi)):
+                if abi[index] == 'address':
+                    _inputData = _inputData.replace(params[index][2:].lower(), _account.address[2:].lower())
+        transaction = {
+            'from': _account.address,
+            'chainId': chainId,
+            'to': _to_address,
+            'gas': 2000000,
+            'nonce': w3.eth.getTransactionCount(_account.address),
+            'data': _inputData
+        }
+        if _gasPrice > 10000:
+            transaction['gasPrice'] = _gasPrice
         else:
-            print_green("mint失败")
-            bark('mint失败', 'https://cn.etherscan.com/tx/' + w3.toHex(tx_hash))
+            transaction['maxFeePerGas'] = _maxFeePerGas
+            transaction['maxPriorityFeePerGas'] = _maxPriorityFeePerGas
+        try:
+            estimateGas = w3.eth.estimateGas(transaction)
+            if estimateGas > maxGasLimit:
+                print_yellow('超过gasLimit上限，跳过')
+                return
+            transaction['gas'] = estimateGas
+            signed = w3.eth.account.sign_transaction(transaction, _privateKey)
+            new_raw = signed.rawTransaction.hex()
+            tx_hash = w3.eth.sendRawTransaction(new_raw)
+            print_green("mint交易发送成功" + w3.toHex(tx_hash))
+            freceipt = w3.eth.waitForTransactionReceipt(tx_hash, 600)
+            if freceipt.status == 1:
+                print_green("mint成功")
+                bark('mint成功', 'https://cn.etherscan.com/tx/' + w3.toHex(tx_hash))
+            else:
+                print_green("mint失败")
+                bark('mint失败', 'https://cn.etherscan.com/tx/' + w3.toHex(tx_hash))
+        except Exception as e:
+            print_yellow('预测失败，跳过:' + str(e))
+            return
     except Exception as e:
-        print_yellow('预测失败，跳过:' + str(e))
+        print_yellow('发送交易失败，跳过:' + str(e))
         return
 
 
@@ -152,7 +165,8 @@ async def txn_handler(txn, unsubscribe):
     if to_address in mintadd:
         print_yellow("mint过，跳过")
         return
-    if not getMethodName(inputData[:10]):
+    isMint, method = getMethodName(inputData[:10])
+    if not isMint:
         print_yellow('可能不是mint交易,跳过')
         return
     if not isBlackList(to_address):
@@ -162,7 +176,7 @@ async def txn_handler(txn, unsubscribe):
         return
     mintadd.append(to_address)
     for index in range(len(accounts)):
-        threading.Thread(target=minttx, args=(accounts[index], privateKeys[index], inputData, from_address, to_address, gasPrice, maxFeePerGas, maxPriorityFeePerGas)).start()
+        threading.Thread(target=minttx, args=(accounts[index], privateKeys[index], inputData, method, from_address, to_address, gasPrice, maxFeePerGas, maxPriorityFeePerGas)).start()
 
 
 def main():
@@ -173,8 +187,8 @@ def main():
             print_blue('开始监控')
             for _follow in follows:
                 filters = [{
-                        "status": "pending",
-                        "from": _follow
+                    "status": "pending",
+                    "from": _follow
                 }]
                 stream.subscribe_address(_follow, txn_handler, filters)
             stream.connect()
@@ -184,6 +198,10 @@ def main():
 
 
 if __name__ == '__main__':
+    print_red("有能力的请使用源码，本打包版本不对使用者安全负责")
+    print_red("打狗请用小号，无法保证无bug")
+    print_red("开源地址：https://github.com/Fooyao/FollowMint")
+    print_red("代码水平较差，有任何优化建议请反馈")
     if not os.path.exists('config.json'):
         print_blue('请先配置config.json')
         file = open('config.json', 'w')
@@ -239,7 +257,7 @@ if __name__ == '__main__':
             for privateKey in privateKeys:
                 accounts.append(w3.eth.account.privateKeyToAccount(privateKey))
             mintadd = []
-            methodNameList = {}
+            methodNameDict = {}
             main()
     except Exception as e:
         print_red(str(e))
