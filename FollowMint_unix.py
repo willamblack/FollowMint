@@ -132,9 +132,6 @@ def minttx(_account, _privateKey, _inputData, _from_address, _to_address, _gasPr
 async def txn_handler(txn, unsubscribe):
     to_address = txn['to']
     from_address = txn['from']
-    if from_address.lower() not in follows:
-        print_yellow("非监控地址，跳过")
-        return
     to_address = w3.toChecksumAddress(to_address)
     gasPrice = 0
     maxFeePerGas = 0
@@ -172,10 +169,13 @@ def main():
     while True:
         try:
             stream = Stream(blocknativeKey)
-            filters = [{"status": "pending"}]
             print_blue(str(len(accounts)) + '个地址开始监控')
             print_blue('开始监控')
             for _follow in follows:
+                filters = [{
+                        "status": "pending",
+                        "from": _follow
+                }]
                 stream.subscribe_address(_follow, txn_handler, filters)
             stream.connect()
         except Exception as e:
@@ -212,7 +212,6 @@ if __name__ == '__main__':
         blocknativeKey = config['blocknativeKey']
         barkKey = config['barkKey']
         follows = config['follow']
-        follows = dict((k.lower(), v) for k, v in follows.items())
         nameabi = {
             'inputs': [],
             'name': 'name',
