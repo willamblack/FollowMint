@@ -51,13 +51,13 @@ def bark(info, data):
 def getMethodName(methodSignature):
     try:
         if methodSignature in methodNameDict:
-            print_yellow(methodNameDict[methodSignature]['method'])
+            print_blue('mint方法：' + methodNameDict[methodSignature]['method'])
             return methodNameDict[methodSignature]['isMint'], methodNameDict[methodSignature]['method']
         res = requests.get('https://www.4byte.directory/api/v1/signatures/?hex_signature=' + methodSignature)
         if res.status_code == 200:
             method = res.json()['results'][0]['text_signature']
             methodName = method.split('(')[0].lower()
-            print_yellow(method)
+            print_blue('mint方法：' + method)
             if 'mint' in methodName:
                 methodNameDict[methodSignature] = {'method': method, 'isMint': True}
                 return True, method
@@ -74,11 +74,12 @@ def isBlackList(_to):
         name = NFTcon.functions.name().call()
         for black in blacklist:
             if black in name:
-                print_yellow(name + "黑名单，跳过")
+                print_red(name + "黑名单" + black + "，跳过")
                 return False
     except:
-        print_yellow('获取NFT名称失败，跳过')
+        print_red('获取NFT名称失败，跳过')
         return False
+    print_blue('NFT名称：' + name)
     return True
 
 
@@ -91,7 +92,7 @@ def isMintTime(_from):
             if tm_hour >= starttime or tm_hour < endtime:
                 pass
             else:
-                print_yellow("非Mint时间，跳过")
+                print_red("非Mint时间，跳过")
                 return False
     return True
 
@@ -100,7 +101,7 @@ def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_addres
     try:
         abi = _method.split('(')[1][:-1].split(',')
         if len(abi) != 0 and 'address' in abi:
-            params = decode_abi(['uint256', 'address'], bytes.fromhex(_inputData[10:]))
+            params = decode_abi(abi, bytes.fromhex(_inputData[10:]))
             for index in range(len(abi)):
                 if abi[index] == 'address':
                     _inputData = _inputData.replace(params[index][2:].lower(), _account.address[2:].lower())
@@ -113,14 +114,14 @@ def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_addres
             'data': _inputData
         }
         if _gasPrice > 10000:
-            transaction['gasPrice'] = _gasPrice
+            transaction['gasPrice'] = _gasPrice + w3.toWei(0.1, 'gwei')
         else:
             transaction['maxFeePerGas'] = _maxFeePerGas
-            transaction['maxPriorityFeePerGas'] = _maxPriorityFeePerGas
+            transaction['maxPriorityFeePerGas'] = _maxPriorityFeePerGas + w3.toWei(0.1, 'gwei')
         try:
             estimateGas = w3.eth.estimateGas(transaction)
             if estimateGas > maxGasLimit:
-                print_yellow('超过gasLimit上限，跳过')
+                print_red('超过gasLimit上限，跳过')
                 return
             transaction['gas'] = estimateGas
             signed = w3.eth.account.sign_transaction(transaction, _privateKey)
@@ -129,16 +130,22 @@ def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_addres
             print_green("mint交易发送成功" + w3.toHex(tx_hash))
             freceipt = w3.eth.waitForTransactionReceipt(tx_hash, 600)
             if freceipt.status == 1:
-                print_green("mint成功")
+                try:
+                    ETHused = freceipt.effectiveGasPrice * freceipt.gasUsed
+                    ETHused = w3.fromWei(ETHused, 'ether')
+                    ETHusedinfo = '本次mint：' + str(ETHused) + 'ETH'
+                except:
+                    ETHusedinfo = ''
+                print_green("mint成功   " + ETHusedinfo)
                 bark('mint成功', 'https://cn.etherscan.com/tx/' + w3.toHex(tx_hash))
             else:
-                print_green("mint失败")
+                print_red("mint失败")
                 bark('mint失败', 'https://cn.etherscan.com/tx/' + w3.toHex(tx_hash))
         except Exception as e:
-            print_yellow('预测失败，跳过:' + str(e))
+            print_red('预测失败，跳过:' + str(e))
             return
     except Exception as e:
-        print_yellow('发送交易失败，跳过:' + str(e))
+        print_red('发送交易失败，跳过:' + str(e))
         return
 
 
@@ -150,29 +157,29 @@ async def txn_handler(txn, unsubscribe):
     maxFeePerGas = 0
     maxPriorityFeePerGas = 0
     if 'gasPrice' in txn:
-        gasPrice = int(txn['gasPrice']) + 1000000
+        gasPrice = int(txn['gasPrice'])
     else:
         maxFeePerGas = int(txn['maxFeePerGas'])
-        maxPriorityFeePerGas = int(txn['maxPriorityFeePerGas']) + 1000000
+        maxPriorityFeePerGas = int(txn['maxPriorityFeePerGas'])
     inputData = txn['input']
     value = txn['value']
     print_yellow(from_address + "监控到新交易")
     if not isMintTime(from_address):
         return
     if value != '0':
-        print_yellow("非免费，跳过")
+        print_red("非免费，跳过")
         return
     if to_address in mintadd:
-        print_yellow("mint过，跳过")
+        print_red("mint过，跳过")
         return
     isMint, method = getMethodName(inputData[:10])
     if not isMint:
-        print_yellow('可能不是mint交易,跳过')
+        print_red('可能不是mint交易,跳过')
         return
     if not isBlackList(to_address):
         return
     if gasPrice > maxGasPrice or maxFeePerGas > maxGasPrice:
-        print_yellow('gasPrice过高,跳过')
+        print_red('gasPrice过高,跳过')
         return
     mintadd.append(to_address)
     for index in range(len(accounts)):
@@ -198,7 +205,7 @@ def main():
 
 
 if __name__ == '__main__':
-    print_red("有能力的请使用源码，本打包版本不对使用者安全负责")
+    print_red("有能力的请使用源码，不对使用者安全负责")
     print_red("打狗请用小号，无法保证无bug")
     print_red("开源地址：https://github.com/Fooyao/FollowMint")
     print_red("代码水平较差，有任何优化建议请反馈")
