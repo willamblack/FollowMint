@@ -30,6 +30,8 @@ blacklist：土狗名字黑名单，含有这些词的屏蔽
 # 已打包的exe
 自行打包或者找朋友帮忙pyinstaller打包吧
 
+实在要用exe的进discord下载吧
+
 监控开始，又闪退的，是网络连不上blocknative，不行就用香港VPS跑，
 
 直接提示错误的，应该是配置文件错误
