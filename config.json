@@ -5,6 +5,7 @@
   "barkKey": "",
   "maxGasPrice": 50,
   "maxGasLimit": 1000000,
+  "scanApikey": "",
   "follow": {
         "0x8888887a5e2491fec904d90044e6cd6c69f1e71c": {"start": 18, "end": 6},
         "0x555555B63d1C3A8c09FB109d2c80464685Ee042B": {"start": 0, "end": 24},
