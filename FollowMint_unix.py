@@ -9,9 +9,10 @@ import os
 
 configExample = {
     "RPC": "https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",
-    "privateKey": ["", ""],
-    "blocknativeKey": "",
-    "barkKey": "",
+    "privateKey": ["私钥1", "私钥2"],
+    "blocknativeKey": "监控平台key",
+    "barkKey": "IOS推送软件key",
+    "scanApikey": "https://etherscan.io/register注册获取",
     "maxGasPrice": 50,
     "maxGasLimit": 1000000,
     "follow": {
@@ -48,13 +49,24 @@ def bark(info, data):
         requests.get('https://api.day.app/' + barkKey + '/' + info + '?url=' + data)
 
 
-def getMethodName(methodSignature):
+def getETHPrice():
+    params = {
+        'module': 'stats',
+        'action': 'ethprice',
+        'apikey': scanApikey
+    }
+    res = requests.get('https://api.etherscan.io/api', params=params)
+    if res.status_code == 200 and res.json()['status'] == '1':
+        return float(res.json()['result']['ethusd'])
+
+
+def getMethodName(methodSignature, _conadd):
     try:
         if methodSignature in methodNameDict:
             print_blue('mint方法：' + methodNameDict[methodSignature]['method'])
             return methodNameDict[methodSignature]['isMint'], methodNameDict[methodSignature]['method']
         res = requests.get('https://www.4byte.directory/api/v1/signatures/?hex_signature=' + methodSignature)
-        if res.status_code == 200:
+        if res.status_code == 200 and res.json()['count'] > 0:
             method = res.json()['results'][0]['text_signature']
             methodName = method.split('(')[0].lower()
             print_blue('mint方法：' + method)
@@ -63,6 +75,25 @@ def getMethodName(methodSignature):
                 return True, method
             else:
                 methodNameDict[methodSignature] = {'method': method, 'isMint': False}
+        else:
+            params = {
+                'module': 'contract',
+                'action': 'getabi',
+                'address': _conadd,
+                'apikey': scanApikey
+            }
+            res = requests.get('https://api.etherscan.io/api', params=params)
+            if res.status_code == 200 and res.json()['status'] == '1':
+                abi = res.json()['result']
+                NFTcon = w3.eth.contract(address=w3.toChecksumAddress(_conadd), abi=abi)
+                abiinfo = NFTcon.get_function_by_selector(methodSignature)
+                method = str(abiinfo)[10:-1]
+                print_blue('mint方法：' + method)
+                if 'mint' in method.split('(')[0].lower():
+                    methodNameDict[methodSignature] = {'method': method, 'isMint': True}
+                    return True, method
+                else:
+                    methodNameDict[methodSignature] = {'method': method, 'isMint': False}
         return False, None
     except:
         return False, None
@@ -116,14 +147,14 @@ def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_addres
         if _gasPrice > 10000:
             transaction['gasPrice'] = _gasPrice + w3.toWei(0.1, 'gwei')
         else:
-            transaction['maxFeePerGas'] = _maxFeePerGas
+            transaction['maxFeePerGas'] = _maxFeePerGas + w3.toWei(0.1, 'gwei')
             transaction['maxPriorityFeePerGas'] = _maxPriorityFeePerGas + w3.toWei(0.1, 'gwei')
         try:
             estimateGas = w3.eth.estimateGas(transaction)
             if estimateGas > maxGasLimit:
                 print_red('超过gasLimit上限，跳过')
                 return
-            transaction['gas'] = estimateGas
+            transaction['gas'] = int(estimateGas * 1.2)
             signed = w3.eth.account.sign_transaction(transaction, _privateKey)
             new_raw = signed.rawTransaction.hex()
             tx_hash = w3.eth.sendRawTransaction(new_raw)
@@ -133,16 +164,19 @@ def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_addres
                 try:
                     ETHused = freceipt.effectiveGasPrice * freceipt.gasUsed
                     ETHused = w3.fromWei(ETHused, 'ether')
-                    ETHusedinfo = '本次mint：' + str(ETHused) + 'ETH'
+                    USDuse = ETHPrice * ETHused
+                    ETHusedinfo = '本次mint：' + str(USDuse) + ' U'
                 except:
                     ETHusedinfo = ''
                 print_green("mint成功   " + ETHusedinfo)
                 bark('mint成功', 'https://cn.etherscan.com/tx/' + w3.toHex(tx_hash))
             else:
                 print_red("mint失败")
+                mintadd.remove(_to_address)
                 bark('mint失败', 'https://cn.etherscan.com/tx/' + w3.toHex(tx_hash))
         except Exception as e:
             print_red('预测失败，跳过:' + str(e))
+            mintadd.remove(_to_address)
             return
     except Exception as e:
         print_red('发送交易失败，跳过:' + str(e))
@@ -172,7 +206,7 @@ async def txn_handler(txn, unsubscribe):
     if to_address in mintadd:
         print_red("mint过，跳过")
         return
-    isMint, method = getMethodName(inputData[:10])
+    isMint, method = getMethodName(inputData[:10], to_address)
     if not isMint:
         print_red('可能不是mint交易,跳过')
         return
@@ -220,20 +254,8 @@ if __name__ == '__main__':
         config = json.loads(file.read())
         RPC = config['RPC']
         privateKeys = config['privateKey']
-        if type(privateKeys) == str:
-            privateKeys = [privateKeys]
-            file = open('config.json', 'w')
-            config['privateKey'] = privateKeys
-            file.write(json.dumps(config))
-            file.close()
-        if 'blacklist' in config:
-            blacklist = config['blacklist']
-        else:
-            blacklist = []
-            file = open('config.json', 'w')
-            config['blacklist'] = ["Ape", "Bear", "Duck", "Pixel", "Not", "Okay", "Woman", "Baby", "Goblin", "Ai"]
-            file.write(json.dumps(config))
-            file.close()
+        scanApikey = config['scanApikey']
+        blacklist = config['blacklist']
         blocknativeKey = config['blocknativeKey']
         barkKey = config['barkKey']
         follows = config['follow']
@@ -244,28 +266,19 @@ if __name__ == '__main__':
             'stateMutability': 'view',
             'type': 'function'
         }
-        if type(follows) == list:
-            print_red('请重新配置follow起始时间，配置文件模板已更新')
-            followsDict = {}
-            for follow in follows:
-                followsDict[follow] = {'start': 0, 'end': 24}
-            config['follow'] = followsDict
-            file = open('config.json', 'w')
-            file.write(json.dumps(config))
-            file.close()
-            time.sleep(10)
-        else:
-            w3 = Web3(Web3.HTTPProvider(RPC))
-            maxGasPrice = config['maxGasPrice']
-            maxGasPrice = w3.toWei(maxGasPrice, 'gwei')
-            maxGasLimit = int(config['maxGasLimit'])
-            chainId = w3.eth.chainId
-            accounts = []
-            for privateKey in privateKeys:
-                accounts.append(w3.eth.account.privateKeyToAccount(privateKey))
-            mintadd = []
-            methodNameDict = {}
-            main()
+        w3 = Web3(Web3.HTTPProvider(RPC))
+        maxGasPrice = config['maxGasPrice']
+        maxGasPrice = w3.toWei(maxGasPrice, 'gwei')
+        maxGasLimit = int(config['maxGasLimit'])
+        chainId = w3.eth.chainId
+        accounts = []
+        for privateKey in privateKeys:
+            accounts.append(w3.eth.account.privateKeyToAccount(privateKey))
+        mintadd = []
+        ETHPrice = getETHPrice()
+        print('ETH单价: ' + str(ETHPrice))
+        methodNameDict = {}
+        main()
     except Exception as e:
         print_red(str(e))
         time.sleep(10)
