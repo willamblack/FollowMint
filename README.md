@@ -19,6 +19,8 @@ blocknativeKey：https://www.blocknative.com/  创建个账号，个人中心获
 
 barkKey：IOS的bark软件推送key，用于推送mint成功或者失败信息（没有可以空着）
 
+scanApikey：https://etherscan.io/register 区块浏览器注册获取
+
 maxGasPrice：最大的GAS，超过不会跟
 
 maxGasLimit：最大的GAS消耗，超过不会跟
