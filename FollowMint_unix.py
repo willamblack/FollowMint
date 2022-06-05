@@ -187,13 +187,17 @@ def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_addres
                 bark('mint成功', 'https://cn.etherscan.com/tx/' + w3.toHex(tx_hash))
             else:
                 print_red("mint失败")
-                mintadd.remove(_to_address)
+                if _to_address in mintadd:
+                    mintadd.remove(_to_address)
                 bark('mint失败', 'https://cn.etherscan.com/tx/' + w3.toHex(tx_hash))
         except Exception as e:
             print_red('预测失败，跳过:' + str(e))
-            mintadd.remove(_to_address)
+            if _to_address in mintadd:
+                mintadd.remove(_to_address)
             return
     except Exception as e:
+        if _to_address in mintadd:
+            mintadd.remove(_to_address)
         print_red('发送交易失败，跳过:' + str(e))
         return
 
