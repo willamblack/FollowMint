@@ -10,11 +10,12 @@ import os
 configExample = {
     "RPC": "https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",
     "privateKey": ["私钥1", "私钥2"],
-    "blocknativeKey": "",
-    "barkKey": "",
-    "scanApikey": "",
+    "blocknativeKey": "监控平台key",
+    "barkKey": "IOS推送软件key",
+    "scanApikey": "https://etherscan.io/register注册获取",
     "maxGasPrice": 50,
     "maxGasLimit": 1000000,
+    "maxValue": 0,
     "follow": {
         "0x8888887a5e2491fec904d90044e6cd6c69f1e71c": {"start": 0, "end": 24},
         "0x555555B63d1C3A8c09FB109d2c80464685Ee042B": {"start": 18, "end": 6},
@@ -143,7 +144,7 @@ def getgas():
         return baseFee, maxFeePerGas, maxPriorityFeePerGas
 
 
-def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_address, _maxFeePerGas, _maxPriorityFeePerGas):
+def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_address, _maxFeePerGas, _maxPriorityFeePerGas, _value):
     try:
         abi = _method.split('(')[1][:-1].split(',')
         if len(abi) != 0 and 'address' in abi:
@@ -159,7 +160,8 @@ def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_addres
             'maxFeePerGas': _maxFeePerGas,
             'maxPriorityFeePerGas': _maxPriorityFeePerGas,
             'nonce': w3.eth.getTransactionCount(_account.address),
-            'data': _inputData
+            'data': _inputData,
+            'value': _value
         }
         try:
             estimateGas = w3.eth.estimateGas(transaction)
@@ -201,12 +203,12 @@ async def txn_handler(txn, unsubscribe):
     from_address = txn['from']
     to_address = w3.toChecksumAddress(to_address)
     inputData = txn['input']
-    value = txn['value']
+    value = int(txn['value'])
     print_yellow(from_address + "监控到新交易")
     if not isMintTime(from_address):
         return
-    if value != '0':
-        print_red("非免费，跳过")
+    if value > maxValue:
+        print_red("超过最大金额，跳过")
         return
     if to_address in mintadd:
         print_red("mint过，跳过")
@@ -223,7 +225,7 @@ async def txn_handler(txn, unsubscribe):
         return
     mintadd.append(to_address)
     for index in range(len(accounts)):
-        threading.Thread(target=minttx, args=(accounts[index], privateKeys[index], inputData, method, from_address, to_address, maxFeePerGas, maxPriorityFeePerGas)).start()
+        threading.Thread(target=minttx, args=(accounts[index], privateKeys[index], inputData, method, from_address, to_address, maxFeePerGas, maxPriorityFeePerGas, value)).start()
 
 
 def main():
@@ -262,6 +264,7 @@ if __name__ == '__main__':
         privateKeys = config['privateKey']
         scanApikey = config['scanApikey']
         blacklist = config['blacklist']
+        maxValue = config['maxValue']
         blocknativeKey = config['blocknativeKey']
         barkKey = config['barkKey']
         follows = config['follow']
@@ -276,6 +279,7 @@ if __name__ == '__main__':
         maxGasPrice = config['maxGasPrice']
         maxGasPrice = w3.toWei(maxGasPrice, 'gwei')
         maxGasLimit = int(config['maxGasLimit'])
+        maxValue = w3.toWei(maxValue, 'ether')
         chainId = w3.eth.chainId
         accounts = []
         for privateKey in privateKeys:
