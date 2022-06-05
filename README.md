@@ -25,6 +25,8 @@ maxGasPrice：最大的GAS，超过不会跟
 
 maxGasLimit：最大的GAS消耗，超过不会跟
 
+maxValue: 最大金额（设置0就只跟免费的，0.1就表示收费0.1以下的也跟）
+
 follow：需要跟随的狗王地址，"follow": {"狗王地址":{"start": 开始跟单时间, "end": 结束跟单时间}}
 
 blacklist：土狗名字黑名单，含有这些词的屏蔽
