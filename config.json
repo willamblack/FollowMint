@@ -5,6 +5,7 @@
   "barkKey": "IOS软件，用于推送",
   "maxGasPrice": 50,
   "maxGasLimit": 1000000,
+  "maxValue": 0,
   "scanApikey": "区块浏览器注册",
   "follow": {
         "0x8888887a5e2491fec904d90044e6cd6c69f1e71c": {"start": 18, "end": 6},
