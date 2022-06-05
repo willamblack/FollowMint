@@ -149,7 +149,22 @@ def isMintTime(_from):
     return True
 
 
-def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_address, _gasPrice, _maxFeePerGas, _maxPriorityFeePerGas):
+def getgas():
+    headers = {"Authorization": blocknativeKey}
+    url = 'https://api.blocknative.com/gasprices/blockprices?confidenceLevels=95'
+    res = requests.get(url=url, headers=headers)
+    if res.status_code == 200:
+        estimatedPrices = res.json()['blockPrices'][0]['estimatedPrices'][0]
+        maxPriorityFeePerGas = estimatedPrices['maxPriorityFeePerGas']
+        maxFeePerGas = estimatedPrices['maxFeePerGas']
+        baseFee = estimatedPrices['price']
+        maxPriorityFeePerGas = w3.toWei(maxPriorityFeePerGas + 0.1, 'gwei')
+        maxFeePerGas = w3.toWei(maxFeePerGas + 0.1, 'gwei')
+        baseFee = w3.toWei(baseFee + 0.1, 'gwei')
+        return baseFee, maxFeePerGas, maxPriorityFeePerGas
+
+
+def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_address, _maxFeePerGas, _maxPriorityFeePerGas):
     try:
         abi = _method.split('(')[1][:-1].split(',')
         if len(abi) != 0 and 'address' in abi:
@@ -162,14 +177,11 @@ def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_addres
             'chainId': chainId,
             'to': _to_address,
             'gas': 2000000,
+            'maxFeePerGas': _maxFeePerGas,
+            'maxPriorityFeePerGas': _maxPriorityFeePerGas,
             'nonce': w3.eth.getTransactionCount(_account.address),
             'data': _inputData
         }
-        if _gasPrice > 10000:
-            transaction['gasPrice'] = _gasPrice + w3.toWei(0.1, 'gwei')
-        else:
-            transaction['maxFeePerGas'] = _maxFeePerGas + w3.toWei(0.1, 'gwei')
-            transaction['maxPriorityFeePerGas'] = _maxPriorityFeePerGas + w3.toWei(0.1, 'gwei')
         try:
             estimateGas = w3.eth.estimateGas(transaction)
             if estimateGas > maxGasLimit:
@@ -184,10 +196,11 @@ def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_addres
             if freceipt.status == 1:
                 try:
                     ETHused = freceipt.effectiveGasPrice * freceipt.gasUsed
-                    ETHused = w3.fromWei(ETHused, 'ether')
+                    ETHused = float(w3.fromWei(ETHused, 'ether'))
                     USDuse = ETHPrice * ETHused
                     ETHusedinfo = '本次mint：' + str(USDuse) + ' U'
-                except:
+                except Exception as e:
+                    print(str(e))
                     ETHusedinfo = ''
                 print_green("mint成功   " + ETHusedinfo)
                 bark('mint成功', 'https://cn.etherscan.com/tx/' + w3.toHex(tx_hash))
@@ -208,14 +221,6 @@ async def txn_handler(txn, unsubscribe):
     to_address = txn['to']
     from_address = txn['from']
     to_address = w3.toChecksumAddress(to_address)
-    gasPrice = 0
-    maxFeePerGas = 0
-    maxPriorityFeePerGas = 0
-    if 'gasPrice' in txn:
-        gasPrice = int(txn['gasPrice'])
-    else:
-        maxFeePerGas = int(txn['maxFeePerGas'])
-        maxPriorityFeePerGas = int(txn['maxPriorityFeePerGas'])
     inputData = txn['input']
     value = txn['value']
     print_yellow(from_address + "监控到新交易")
@@ -233,12 +238,13 @@ async def txn_handler(txn, unsubscribe):
         return
     if not isBlackList(to_address):
         return
-    if gasPrice > maxGasPrice or maxFeePerGas > maxGasPrice:
+    gasPrice, maxFeePerGas, maxPriorityFeePerGas = getgas()
+    if gasPrice > maxGasPrice:
         print_red('gasPrice过高,跳过')
         return
     mintadd.append(to_address)
     for index in range(len(accounts)):
-        threading.Thread(target=minttx, args=(accounts[index], privateKeys[index], inputData, method, from_address, to_address, gasPrice, maxFeePerGas, maxPriorityFeePerGas)).start()
+        threading.Thread(target=minttx, args=(accounts[index], privateKeys[index], inputData, method, from_address, to_address, maxFeePerGas, maxPriorityFeePerGas)).start()
 
 
 def main():
