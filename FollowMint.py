@@ -262,6 +262,8 @@ async def txn_handler(txn, unsubscribe):
         return
     maxFeePerGas = maxFeePerGas if maxFeePerGas > tx_maxFeePerGas else tx_maxFeePerGas
     maxPriorityFeePerGas = maxPriorityFeePerGas if maxPriorityFeePerGas > tx_maxPriorityFeePerGas else tx_maxPriorityFeePerGas
+    if gasPrice + maxPriorityFeePerGas < maxFeePerGas:
+        maxFeePerGas = gasPrice + maxPriorityFeePerGas
     mintadd.append(to_address)
     for index in range(len(accounts)):
         threading.Thread(target=minttx, args=(accounts[index], privateKeys[index], inputData, method, from_address, to_address, maxFeePerGas, maxPriorityFeePerGas, value, gasLimit)).start()
