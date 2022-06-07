@@ -164,11 +164,10 @@ def isMintTime(_from):
 
 
 def getgas():
-    headers = {"Authorization": blocknativeKey}
-    url = 'https://api.blocknative.com/gasprices/blockprices?confidenceLevels=95'
-    res = requests.get(url=url, headers=headers)
+    url = 'https://blocknative-api.herokuapp.com/data'
+    res = requests.get(url=url)
     if res.status_code == 200:
-        estimatedPrices = res.json()['blockPrices'][0]['estimatedPrices'][0]
+        estimatedPrices = res.json()['estimatedPrices'][0]
         maxPriorityFeePerGas = estimatedPrices['maxPriorityFeePerGas']
         maxFeePerGas = estimatedPrices['maxFeePerGas']
         baseFee = estimatedPrices['price']
@@ -202,8 +201,14 @@ def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_addres
             if estimateGas > _gasLimit:
                 transaction['gas'] = int(estimateGas * 1.2)
         except Exception as e:
+            if 'max fee per gas less than block base fee' in str(e):
+                _, maxFeePerGas, maxPriorityFeePerGas = getgas()
+                transaction['maxFeePerGas'] = maxFeePerGas
+                transaction['maxPriorityFeePerGas'] = maxPriorityFeePerGas
             if 'allowance' not in str(e):
                 print_color('发送交易失败:' + str(e), 'red')
+                if _to_address in mintadd:
+                    mintadd.remove(_to_address)
                 return
         signed = w3.eth.account.sign_transaction(transaction, _privateKey)
         new_raw = signed.rawTransaction.hex()
