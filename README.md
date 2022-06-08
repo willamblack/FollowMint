@@ -47,5 +47,7 @@ https://twitter.com/fooyao158
 
 https://discord.gg/mgrcUfPEF9
 
+#打赏
 
+fooyao.eth
 
