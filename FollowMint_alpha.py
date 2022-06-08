@@ -14,18 +14,18 @@ configExample = {
     "RPC": "https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",
     "privateKey": ["私钥1", "私钥2"],
     "blocknativeKey": "监控平台key",
+    "alchemyKey": "",
     "barkKey": "IOS推送软件key",
     "scanApikey": "https://etherscan.io/register注册获取",
     "maxGasPrice": 50,
     "maxGasLimit": 1000000,
-    "alchemyKey": "",
     "maxValue": 0,
     "follow": {
         "0x8888887a5e2491fec904d90044e6cd6c69f1e71c": {"start": 0, "end": 24},
         "0x555555B63d1C3A8c09FB109d2c80464685Ee042B": {"start": 18, "end": 6},
         "0x99999983c70de9543cdc11dB5DE66A457d241e8B": {"start": 8, "end": 20}
     },
-    "blacklist": ["Ape", "Bear", "Duck", "Pixel", "Not", "Okay", "Woman", "Baby", "Goblin", "Ai"]
+    "blacklist": ["Ape", "Pixel", "Not", "Okay", "Woman", "Baby", "Goblin", "Ai"]
 }
 
 if platform.system().lower() == 'windows':
@@ -150,23 +150,22 @@ def isBlackList(_to):
 
 
 def isMintTime(_from):
-    for _follow in follows:
-        if _follow.lower() == _from.lower():
-            starttime = int(follows[_follow]['start'])
-            endtime = int(follows[_follow]['end'])
-            tm_hour = time.localtime().tm_hour
-            if starttime < endtime:
-                if starttime <= tm_hour < endtime:
-                    pass
-                else:
-                    print_color("非Mint时间，跳过", 'red')
-                    return False
+    if _from.lower() in follows:
+        starttime = int(follows[_from.lower()]['start'])
+        endtime = int(follows[_from.lower()]['end'])
+        tm_hour = time.localtime().tm_hour
+        if starttime < endtime:
+            if starttime <= tm_hour < endtime:
+                pass
             else:
-                if endtime <= tm_hour < starttime:
-                    print_color("非Mint时间，跳过", 'red')
-                    return False
-                else:
-                    pass
+                print_color("非Mint时间，跳过", 'red')
+                return False
+        else:
+            if endtime <= tm_hour < starttime:
+                print_color("非Mint时间，跳过", 'red')
+                return False
+            else:
+                pass
     return True
 
 
@@ -210,7 +209,7 @@ def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_addres
         except Exception as e:
             if 'max fee per gas less than block base fee' in str(e):
                 _, maxFeePerGas, maxPriorityFeePerGas = getgas()
-                transaction['maxFeePerGas'] = maxFeePerGas
+                transaction['maxFeePerGas'] = int(maxFeePerGas * 2)
                 transaction['maxPriorityFeePerGas'] = maxPriorityFeePerGas
             if 'allowance' not in str(e):
                 print_color('发送交易失败:' + str(e), 'red')
@@ -355,12 +354,13 @@ async def alchemy():
                 if "result" in result:
                     print_color(f"监控{_follow}地址成功", 'blue')
             async for message in websocket:
-                print(message)
                 json_data = json.loads(message)
                 if 'params' in json_data:
                     txn = json_data['params']['result']
                     to_address = txn['to']
                     from_address = txn['from']
+                    if from_address.lower() not in follows:
+                        return
                     inputData = txn['input']
                     gasLimit = int(txn['gas'], 16)
                     value = int(txn['value'], 16)
@@ -398,6 +398,7 @@ if __name__ == '__main__':
         alchemyKey = config['alchemyKey']
         barkKey = config['barkKey']
         follows = config['follow']
+        follows = dict((k.lower(), v) for k, v in follows.items())
         nameabi = {
             'inputs': [],
             'name': 'name',
