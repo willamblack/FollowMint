@@ -33,7 +33,7 @@ web3，blocknative-sdk(alpha版本不需要，后续将不需要)，requests
 
 **blacklist**：土狗名字黑名单，含有这些词的屏蔽
 
-#报错
+# 报错
 1，async for' requires an object with __aiter__ method
 
   pip install websockets==10.3更新下websockets既可
