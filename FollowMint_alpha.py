@@ -155,11 +155,18 @@ def isMintTime(_from):
             starttime = int(follows[_follow]['start'])
             endtime = int(follows[_follow]['end'])
             tm_hour = time.localtime().tm_hour
-            if tm_hour >= starttime or tm_hour < endtime:
-                pass
+            if starttime < endtime:
+                if starttime <= tm_hour < endtime:
+                    pass
+                else:
+                    print_color("非Mint时间，跳过", 'red')
+                    return False
             else:
-                print_color("非Mint时间，跳过", 'red')
-                return False
+                if endtime <= tm_hour < starttime:
+                    print_color("非Mint时间，跳过", 'red')
+                    return False
+                else:
+                    pass
     return True
 
 
@@ -190,7 +197,7 @@ def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_addres
             'chainId': chainId,
             'to': _to_address,
             'gas': _gasLimit,
-            'maxFeePerGas': _maxFeePerGas,
+            'maxFeePerGas': int(_maxFeePerGas * 2),
             'maxPriorityFeePerGas': _maxPriorityFeePerGas,
             'nonce': w3.eth.getTransactionCount(_account.address),
             'data': _inputData,
