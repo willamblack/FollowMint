@@ -1,5 +1,5 @@
 # 需要的module
-web3，blocknative-sdk(alpha版本不需要，后续将不需要)，requests
+web3，requests
 
 
 # FollowMint
