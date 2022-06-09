@@ -1,5 +1,6 @@
 import json
 import platform
+import ssl
 import threading
 import time
 import requests
@@ -10,6 +11,7 @@ import asyncio
 from datetime import datetime
 import websockets
 
+ssl._create_default_https_context = ssl._create_unverified_context
 configExample = {
     "RPC": "https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",
     "privateKey": ["私钥1", "私钥2"],
@@ -71,53 +73,43 @@ def getETHPrice():
 
 def getMethodName(methodSignature, _conadd, _pendingBlockNumber):
     try:
-        if methodSignature in methodNameDict:
-            print_color('mint方法：' + methodNameDict[methodSignature]['method'], 'blue')
-            return methodNameDict[methodSignature]['isMint'], methodNameDict[methodSignature]['method']
-        res = requests.get('https://www.4byte.directory/api/v1/signatures/?hex_signature=' + methodSignature)
-        if res.status_code == 200 and res.json()['count'] > 0:
-            method = res.json()['results'][0]['text_signature']
-            methodName = method.split('(')[0].lower()
-            print_color('mint方法：' + method, 'blue')
-            if 'mint' in methodName:
-                methodNameDict[methodSignature] = {'method': method, 'isMint': True}
-                return True, method
-            else:
-                if isMintFromBlock(_pendingBlockNumber, _conadd, methodSignature):
-                    methodNameDict[methodSignature] = {'method': method, 'isMint': True}
-                    return True, method
-                methodNameDict[methodSignature] = {'method': method, 'isMint': False}
-        else:
-            params = {
-                'module': 'contract',
-                'action': 'getabi',
-                'address': _conadd,
-                'apikey': scanApikey
-            }
-            res = requests.get('https://api.etherscan.io/api', params=params)
-            if res.status_code == 200 and res.json()['status'] == '1':
-                abi = res.json()['result']
-                NFTcon = w3.eth.contract(address=w3.toChecksumAddress(_conadd), abi=abi)
-                abiinfo = NFTcon.get_function_by_selector(methodSignature)
-                method = str(abiinfo)[10:-1]
+        isMint, mintNum = isMintFromBlock(_pendingBlockNumber, _conadd, methodSignature)
+        if isMint:
+            if methodSignature in methodNameDict:
+                print_color('mint方法：' + methodNameDict[methodSignature]['method'], 'blue')
+                return methodNameDict[methodSignature]['isMint'], methodNameDict[methodSignature]['method'], mintNum
+            res = requests.get('https://www.4byte.directory/api/v1/signatures/?hex_signature=' + methodSignature)
+            if res.status_code == 200 and res.json()['count'] > 0:
+                method = res.json()['results'][0]['text_signature']
                 print_color('mint方法：' + method, 'blue')
-                if 'mint' in method.split('(')[0].lower():
+                methodNameDict[methodSignature] = {'method': method, 'isMint': True}
+                return True, method, mintNum
+            else:
+                params = {
+                    'module': 'contract',
+                    'action': 'getabi',
+                    'address': _conadd,
+                    'apikey': scanApikey
+                }
+                res = requests.get('https://api.etherscan.io/api', params=params)
+                if res.status_code == 200 and res.json()['status'] == '1':
+                    abi = res.json()['result']
+                    NFTcon = w3.eth.contract(address=w3.toChecksumAddress(_conadd), abi=abi)
+                    abiinfo = NFTcon.get_function_by_selector(methodSignature)
+                    method = str(abiinfo)[10:-1]
+                    print_color('mint方法：' + method, 'blue')
                     methodNameDict[methodSignature] = {'method': method, 'isMint': True}
-                    return True, method
-                else:
-                    if isMintFromBlock(_pendingBlockNumber, _conadd, methodSignature):
-                        methodNameDict[methodSignature] = {'method': method, 'isMint': True}
-                        return True, method
-                    methodNameDict[methodSignature] = {'method': method, 'isMint': False}
-        return False, None
+                    return True, method, mintNum
+        else:
+            return False, None, 0
     except:
-        return False, None
+        return False, None, 0
 
 
 def isMintFromBlock(_block, _conadd, _methodSignature):
     try:
         log = w3.eth.filter({
-            'fromBlock': _block - 10,
+            'fromBlock': _block - 11,
             'toBlock': _block - 1,
             'address': w3.toChecksumAddress(_conadd),
             'topics': ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
@@ -125,13 +117,15 @@ def isMintFromBlock(_block, _conadd, _methodSignature):
         })
         txs = log.get_all_entries()
         if len(txs) > 1:
+            transactionHashList = [tx.transactionHash for tx in txs]
+            allMaxMint = transactionHashList.count(max(transactionHashList, key=transactionHashList.count))
             transaction = w3.eth.get_transaction(txs[0]['transactionHash'])
             mintMethod = transaction['input'][:10]
             if _methodSignature == mintMethod:
-                return True
+                return True, allMaxMint
     except Exception as e:
         print(str(e))
-    return False
+    return False, 0
 
 
 def isBlackList(_to):
@@ -211,7 +205,7 @@ def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_addres
                 _, maxFeePerGas, maxPriorityFeePerGas = getgas()
                 transaction['maxFeePerGas'] = int(maxFeePerGas * 2)
                 transaction['maxPriorityFeePerGas'] = maxPriorityFeePerGas
-            if 'allowance' not in str(e):
+            elif 'allowance' not in str(e):
                 print_color('发送交易失败:' + str(e), 'red')
                 if _to_address in mintadd:
                     mintadd.remove(_to_address)
@@ -254,9 +248,12 @@ def txn_handler(to_address, from_address, inputData, value, gasLimit, tx_maxFeeP
     if to_address in mintadd:
         print_color("mint过，跳过", 'red')
         return
-    isMint, method = getMethodName(inputData[:10], to_address, pendingBlockNumber)
+    isMint, method, mintNum = getMethodName(inputData[:10], to_address, pendingBlockNumber)
     if not isMint:
         print_color('可能不是mint交易,跳过', 'red')
+        return
+    if mintNum > maxMintNum:
+        print_color(f'mint数量{mintNum}超过设定上限{maxMintNum},跳过', 'red')
         return
     if not isBlackList(to_address):
         return
@@ -274,7 +271,7 @@ def txn_handler(to_address, from_address, inputData, value, gasLimit, tx_maxFeeP
 
 
 async def blocknative():
-    async for websocket in websockets.connect('wss://api.blocknative.com/v0'):
+    async for websocket in websockets.connect('wss://api.blocknative.com/v0', ssl=False):
         try:
             initialize = {
                 "categoryCode": "initialize",
@@ -371,8 +368,9 @@ async def alchemy():
                         tx_maxFeePerGas, tx_maxPriorityFeePerGas = 0, 0
                     pendingBlockNumber = w3.eth.get_block_number()
                     threading.Thread(target=txn_handler, args=(to_address, from_address, inputData, value, gasLimit, tx_maxFeePerGas, tx_maxPriorityFeePerGas, pendingBlockNumber)).start()
-        except websockets.ConnectionClosed:
-            continue
+        except Exception as e:
+            print_color(str(e), 'red')
+            websockets.ConnectionClosed()
 
 
 if __name__ == '__main__':
@@ -398,6 +396,7 @@ if __name__ == '__main__':
         alchemyKey = config['alchemyKey']
         barkKey = config['barkKey']
         follows = config['follow']
+        maxMintNum = int(config['maxMintNum'])
         follows = dict((k.lower(), v) for k, v in follows.items())
         nameabi = {
             'inputs': [],
@@ -412,9 +411,7 @@ if __name__ == '__main__':
         maxGasLimit = int(config['maxGasLimit'])
         maxValue = w3.toWei(maxValue, 'ether')
         chainId = w3.eth.chainId
-        accounts = []
-        for privateKey in privateKeys:
-            accounts.append(w3.eth.account.privateKeyToAccount(privateKey))
+        accounts = [w3.eth.account.privateKeyToAccount(privateKey) for privateKey in privateKeys]
         mintadd = []
         ETHPrice = getETHPrice()
         print_color('ETH单价: ' + str(ETHPrice), 'green')
