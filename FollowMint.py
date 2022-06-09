@@ -271,7 +271,7 @@ def txn_handler(to_address, from_address, inputData, value, gasLimit, tx_maxFeeP
 
 
 async def blocknative():
-    async for websocket in websockets.connect('wss://api.blocknative.com/v0', ssl=False):
+    async for websocket in websockets.connect('wss://api.blocknative.com/v0'):
         try:
             initialize = {
                 "categoryCode": "initialize",
