@@ -1,27 +1,26 @@
-import json
-import platform
-import ssl
-import threading
-import time
-import requests
-from web3 import Web3
-from eth_abi import decode_abi
 import os
+import json
+import time
 import asyncio
-from datetime import datetime
+import platform
+import requests
+import threading
 import websockets
+from web3 import Web3
+from datetime import datetime
+from eth_abi import decode_abi
 
-ssl._create_default_https_context = ssl._create_unverified_context
 configExample = {
     "RPC": "https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",
-    "privateKey": ["私钥1", "私钥2"],
-    "blocknativeKey": "监控平台key",
+    "privateKey": ["privateKey1", "privateKey2"],
+    "blocknativeKey": "",
     "alchemyKey": "",
-    "barkKey": "IOS推送软件key",
-    "scanApikey": "https://etherscan.io/register注册获取",
+    "barkKey": "",
+    "scanApikey": "",
     "maxGasPrice": 50,
     "maxGasLimit": 1000000,
     "maxValue": 0,
+    "maxMintNum": 5,
     "follow": {
         "0x8888887a5e2491fec904d90044e6cd6c69f1e71c": {"start": 0, "end": 24},
         "0x555555B63d1C3A8c09FB109d2c80464685Ee042B": {"start": 18, "end": 6},
@@ -308,7 +307,13 @@ async def blocknative():
                     }
                 }
                 await websocket.send(json.dumps(configs))
-            async for message in websocket:
+            while True:
+                try:
+                    message = await asyncio.wait_for(websocket.recv(), timeout=30*60)
+                except asyncio.TimeoutError:
+                    print_color('30分钟无消息，可能断开，尝试重连', 'red')
+                    await websocket.close()
+                    break
                 json_data = json.loads(message)
                 if json_data['status'] == 'ok' and 'event' in json_data:
                     if json_data['event']['categoryCode'] == 'initialize':
@@ -331,8 +336,9 @@ async def blocknative():
                         threading.Thread(target=txn_handler, args=(to_address, from_address, inputData, value, gasLimit, tx_maxFeePerGas, tx_maxPriorityFeePerGas, pendingBlockNumber)).start()
                     else:
                         print_color(message, 'blue')
-        except websockets.ConnectionClosed:
-            continue
+        except Exception as e:
+            print_color(str(e), 'red')
+            await websocket.close()
 
 
 async def alchemy():
@@ -350,7 +356,13 @@ async def alchemy():
                 result = await websocket.recv()
                 if "result" in result:
                     print_color(f"监控{_follow}地址成功", 'blue')
-            async for message in websocket:
+            while True:
+                try:
+                    message = await asyncio.wait_for(websocket.recv(), timeout=30*60)
+                except asyncio.TimeoutError:
+                    print_color('30分钟无消息，可能断开，尝试重连', 'red')
+                    await websocket.close()
+                    break
                 json_data = json.loads(message)
                 if 'params' in json_data:
                     txn = json_data['params']['result']
@@ -370,7 +382,7 @@ async def alchemy():
                     threading.Thread(target=txn_handler, args=(to_address, from_address, inputData, value, gasLimit, tx_maxFeePerGas, tx_maxPriorityFeePerGas, pendingBlockNumber)).start()
         except Exception as e:
             print_color(str(e), 'red')
-            websockets.ConnectionClosed()
+            await websocket.close()
 
 
 if __name__ == '__main__':
