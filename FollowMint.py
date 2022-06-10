@@ -10,25 +10,27 @@ from web3 import Web3
 from datetime import datetime
 from eth_abi import decode_abi
 
+# 这里是作为模板输出到config用，修改无用
 configExample = {
-    "RPC": "https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",
-    "privateKey": ["privateKey1", "privateKey2"],
-    "blocknativeKey": "",
-    "alchemyKey": "",
+    "RPC": "https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",  # RPC节点，得支持w3.eth.filter才行
+    "privateKey": ["privateKey1", "privateKey2"],  # 私钥，支持多个
+    "blocknativeKey": "",  # blocknative的key，和alchemyKey二选一即可
+    "alchemyKey": "",  # alchemy的key，和blocknativeKey二选一即可
     "barkKey": "",
     "scanApikey": "",
-    "maxGasPrice": 50,
+    "maxGasPrice": 50,  # baseGas上限，超过不打
     "maxGasLimit": 1000000,
-    "maxValue": 0,
-    "maxMintNum": 5,
+    "maxValue": 0,  # 0表示只打免费，0.1表示付费金额小于0.1ETH的都打
+    "maxMintNum": 5,  # 只打一个包5个NFT以内的
     "follow": {
-        "0x8888887a5e2491fec904d90044e6cd6c69f1e71c": {"start": 0, "end": 24},
+        "0x8888887a5e2491fec904d90044e6cd6c69f1e71c": {"start": 0, "end": 24},   # 0点到24点全天跟单
         "0x555555B63d1C3A8c09FB109d2c80464685Ee042B": {"start": 18, "end": 6},
         "0x99999983c70de9543cdc11dB5DE66A457d241e8B": {"start": 8, "end": 20}
     },
-    "blacklist": ["Ape", "Pixel", "Not", "Okay", "Woman", "Baby", "Goblin", "Ai"]
+    "blacklist": ["Ape", "Pixel", "Not", "Okay", "Woman", "Baby", "Goblin", "Ai"]  # 黑名单区分大小写
 }
 
+# 输出颜色优化
 if platform.system().lower() == 'windows':
     import ctypes
     import sys
@@ -54,6 +56,7 @@ else:
         print(f'[{stime}] \033[1;{colorDict[color]}{message}\033[0m')
 
 
+# bark推送
 def bark(info, data):
     if barkKey != '':
         requests.get('https://api.day.app/' + barkKey + '/' + info + '?url=' + data)
@@ -70,19 +73,22 @@ def getETHPrice():
         return float(res.json()['result']['ethusd'])
 
 
-def getMethodName(methodSignature, _conadd, _pendingBlockNumber):
+def getMethodName(_inputData, _conadd, _pendingBlockNumber):
     try:
-        isMint, mintNum = isMintFromBlock(_pendingBlockNumber, _conadd, methodSignature)
+        isMint, mintNum, safeMint = isMintFromBlock(_pendingBlockNumber, _conadd, _inputData)
         if isMint:
+            if safeMint:
+                return True, None, mintNum, True
+            methodSignature = _inputData[:10]
             if methodSignature in methodNameDict:
                 print_color('mint方法：' + methodNameDict[methodSignature]['method'], 'blue')
-                return methodNameDict[methodSignature]['isMint'], methodNameDict[methodSignature]['method'], mintNum
+                return methodNameDict[methodSignature]['isMint'], methodNameDict[methodSignature]['method'], mintNum, False
             res = requests.get('https://www.4byte.directory/api/v1/signatures/?hex_signature=' + methodSignature)
             if res.status_code == 200 and res.json()['count'] > 0:
                 method = res.json()['results'][0]['text_signature']
                 print_color('mint方法：' + method, 'blue')
                 methodNameDict[methodSignature] = {'method': method, 'isMint': True}
-                return True, method, mintNum
+                return True, method, mintNum, False
             else:
                 params = {
                     'module': 'contract',
@@ -98,14 +104,14 @@ def getMethodName(methodSignature, _conadd, _pendingBlockNumber):
                     method = str(abiinfo)[10:-1]
                     print_color('mint方法：' + method, 'blue')
                     methodNameDict[methodSignature] = {'method': method, 'isMint': True}
-                    return True, method, mintNum
+                    return True, method, mintNum, False
         else:
-            return False, None, 0
+            return False, None, 0, False
     except:
-        return False, None, 0
+        return False, None, 0, False
 
 
-def isMintFromBlock(_block, _conadd, _methodSignature):
+def isMintFromBlock(_block, _conadd, _inputData):
     try:
         log = w3.eth.filter({
             'fromBlock': _block - 11,
@@ -113,18 +119,26 @@ def isMintFromBlock(_block, _conadd, _methodSignature):
             'address': w3.toChecksumAddress(_conadd),
             'topics': ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
                        '0x0000000000000000000000000000000000000000000000000000000000000000']
-        })
+        })  # 拉取所有0地址转移出来NFT的logs
         txs = log.get_all_entries()
         if len(txs) > 1:
-            transactionHashList = [tx.transactionHash for tx in txs]
-            allMaxMint = transactionHashList.count(max(transactionHashList, key=transactionHashList.count))
+            transactionHashDict = {}
+            for tx in txs:
+                if tx.transactionHash in transactionHashDict:
+                    transactionHashDict[tx.transactionHash] += 1
+                else:
+                    transactionHashDict[tx.transactionHash] = 1
+            transactionHashList = list(transactionHashDict.values())
+            allMaxMint = max(transactionHashList, key=transactionHashList.count)  # 获取重复交易哈希出现最多次数，也就是最大mint次数
             transaction = w3.eth.get_transaction(txs[0]['transactionHash'])
-            mintMethod = transaction['input'][:10]
-            if _methodSignature == mintMethod:
-                return True, allMaxMint
+            _input = transaction['input'][:10]
+            if _inputData == _input:
+                return True, allMaxMint, True
+            elif _inputData[:10] == _input[:10]:
+                return True, allMaxMint, False
     except Exception as e:
         print(str(e))
-    return False, 0
+    return False, 0, False
 
 
 def isBlackList(_to):
@@ -148,17 +162,13 @@ def isMintTime(_from):
         endtime = int(follows[_from.lower()]['end'])
         tm_hour = time.localtime().tm_hour
         if starttime < endtime:
-            if starttime <= tm_hour < endtime:
-                pass
-            else:
+            if not starttime <= tm_hour < endtime:
                 print_color("非Mint时间，跳过", 'red')
                 return False
         else:
             if endtime <= tm_hour < starttime:
                 print_color("非Mint时间，跳过", 'red')
                 return False
-            else:
-                pass
     return True
 
 
@@ -167,23 +177,20 @@ def getgas():
     res = requests.get(url=url)
     if res.status_code == 200:
         estimatedPrices = res.json()['estimatedPrices'][0]
-        maxPriorityFeePerGas = estimatedPrices['maxPriorityFeePerGas']
-        maxFeePerGas = estimatedPrices['maxFeePerGas']
-        baseFee = estimatedPrices['price']
-        maxPriorityFeePerGas = w3.toWei(maxPriorityFeePerGas + 0.1, 'gwei')
-        maxFeePerGas = w3.toWei(maxFeePerGas + 0.1, 'gwei')
-        baseFee = w3.toWei(baseFee + 0.1, 'gwei')
+        maxPriorityFeePerGas, maxFeePerGas, baseFee = estimatedPrices['maxPriorityFeePerGas'], estimatedPrices['maxFeePerGas'], estimatedPrices['price']
+        maxPriorityFeePerGas, maxFeePerGas, baseFee = w3.toWei(maxPriorityFeePerGas + 0.1, 'gwei'), w3.toWei(maxFeePerGas + 0.1, 'gwei'), w3.toWei(baseFee + 0.1, 'gwei')
         return baseFee, maxFeePerGas, maxPriorityFeePerGas
 
 
-def minttx(_account, _privateKey, _inputData, _method, _from_address, _to_address, _maxFeePerGas, _maxPriorityFeePerGas, _value, _gasLimit):
+def minttx(_account, _privateKey, _inputData, _method, _safeMint, _from_address, _to_address, _maxFeePerGas, _maxPriorityFeePerGas, _value, _gasLimit):
     try:
-        abi = _method.split('(')[1][:-1].split(',')
-        if len(abi) != 0 and 'address' in abi:
-            params = decode_abi(abi, bytes.fromhex(_inputData[10:]))
-            for index in range(len(abi)):
-                if abi[index] == 'address':
-                    _inputData = _inputData.replace(params[index][2:].lower(), _account.address[2:].lower())
+        if not _safeMint:
+            abi = _method.split('(')[1][:-1].split(',')
+            if len(abi) != 0 and 'address' in abi:
+                params = decode_abi(abi, bytes.fromhex(_inputData[10:]))
+                for index in range(len(abi)):
+                    if abi[index] == 'address':
+                        _inputData = _inputData.replace(params[index][2:].lower(), _account.address[2:].lower())
         transaction = {
             'from': _account.address,
             'chainId': chainId,
@@ -247,7 +254,7 @@ def txn_handler(to_address, from_address, inputData, value, gasLimit, tx_maxFeeP
     if to_address in mintadd:
         print_color("mint过，跳过", 'red')
         return
-    isMint, method, mintNum = getMethodName(inputData[:10], to_address, pendingBlockNumber)
+    isMint, method, mintNum, safeMint = getMethodName(inputData, to_address, pendingBlockNumber)
     if not isMint:
         print_color('可能不是mint交易,跳过', 'red')
         return
@@ -266,45 +273,27 @@ def txn_handler(to_address, from_address, inputData, value, gasLimit, tx_maxFeeP
         maxFeePerGas = gasPrice + maxPriorityFeePerGas
     mintadd.append(to_address)
     for index in range(len(accounts)):
-        threading.Thread(target=minttx, args=(accounts[index], privateKeys[index], inputData, method, from_address, to_address, maxFeePerGas, maxPriorityFeePerGas, value, gasLimit)).start()
+        threading.Thread(target=minttx, args=(accounts[index], privateKeys[index], inputData, method, safeMint, from_address, to_address, maxFeePerGas, maxPriorityFeePerGas, value, gasLimit)).start()
 
 
 async def blocknative():
     async for websocket in websockets.connect('wss://api.blocknative.com/v0'):
         try:
             initialize = {
-                "categoryCode": "initialize",
-                "eventCode": "checkDappId",
-                "dappId": blocknativeKey,
-                "timeStamp": datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+                "categoryCode": "initialize", "eventCode": "checkDappId",
+                "dappId": blocknativeKey, "timeStamp": datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
                 "version": "1",
-                "blockchain": {
-                    "system": "ethereum",
-                    "network": "main"
-                }
+                "blockchain": {"system": "ethereum", "network": "main"}
             }
             await websocket.send(json.dumps(initialize))
             for _follow in follows:
                 configs = {
-                    "categoryCode": "configs",
-                    "eventCode": "put",
-                    "config": {
-                        "scope": _follow,
-                        "filters": [
-                            {
-                                "from": _follow,
-                                "status": "pending"
-                            }
-                        ],
-                        "watchAddress": True
-                    },
+                    "categoryCode": "configs", "eventCode": "put",
+                    "config": {"scope": _follow, "filters": [{"from": _follow, "status": "pending"}], "watchAddress": True},
                     "dappId": blocknativeKey,
                     "timeStamp": datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
                     "version": "1",
-                    "blockchain": {
-                        "system": "ethereum",
-                        "network": "main"
-                    }
+                    "blockchain": {"system": "ethereum", "network": "main"}
                 }
                 await websocket.send(json.dumps(configs))
             while True:
@@ -322,14 +311,9 @@ async def blocknative():
                         print_color(f"监控{json_data['event']['config']['scope']}地址成功", 'blue')
                     elif json_data['event']['categoryCode'] == 'activeAddress':
                         txn = json_data['event']['transaction']
-                        to_address = txn['to']
-                        from_address = txn['from']
-                        inputData = txn['input']
-                        gasLimit = int(txn['gas'])
-                        value = int(txn['value'])
+                        to_address, from_address, inputData, gasLimit, value = txn['to'], txn['from'], txn['input'], int(txn['gas']), int(txn['value'])
                         if 'maxFeePerGas' in txn:
-                            tx_maxFeePerGas = int(txn['maxFeePerGas'])
-                            tx_maxPriorityFeePerGas = int(txn['maxPriorityFeePerGas'])
+                            tx_maxFeePerGas, tx_maxPriorityFeePerGas = int(txn['maxFeePerGas']), int(txn['maxPriorityFeePerGas'])
                         else:
                             tx_maxFeePerGas, tx_maxPriorityFeePerGas = 0, 0
                         pendingBlockNumber = int(txn['pendingBlockNumber'])
@@ -346,9 +330,7 @@ async def alchemy():
         try:
             json_data = {
                 "jsonrpc": "2.0",
-                "id": 1,
-                "method": "eth_subscribe",
-                "params": []
+                "id": 1, "method": "eth_subscribe", "params": []
             }
             for _follow in follows:
                 json_data['params'] = ["alchemy_filteredNewFullPendingTransactions", {"address": _follow}]
@@ -366,16 +348,11 @@ async def alchemy():
                 json_data = json.loads(message)
                 if 'params' in json_data:
                     txn = json_data['params']['result']
-                    to_address = txn['to']
-                    from_address = txn['from']
+                    to_address, from_address, inputData, gasLimit, value = txn['to'], txn['from'], txn['input'], int(txn['gas'], 16), int(txn['value'], 16)
                     if from_address.lower() not in follows:
                         return
-                    inputData = txn['input']
-                    gasLimit = int(txn['gas'], 16)
-                    value = int(txn['value'], 16)
                     if 'maxFeePerGas' in txn:
-                        tx_maxFeePerGas = int(txn['maxFeePerGas'], 16)
-                        tx_maxPriorityFeePerGas = int(txn['maxPriorityFeePerGas'], 16)
+                        tx_maxFeePerGas, tx_maxPriorityFeePerGas = int(txn['maxFeePerGas'], 16), int(txn['maxPriorityFeePerGas'], 16)
                     else:
                         tx_maxFeePerGas, tx_maxPriorityFeePerGas = 0, 0
                     pendingBlockNumber = w3.eth.get_block_number()
@@ -399,40 +376,24 @@ if __name__ == '__main__':
     try:
         file = open('config.json', 'r')
         config = json.loads(file.read())
-        RPC = config['RPC']
-        privateKeys = config['privateKey']
-        scanApikey = config['scanApikey']
-        blacklist = config['blacklist']
-        maxValue = config['maxValue']
-        blocknativeKey = config['blocknativeKey']
-        alchemyKey = config['alchemyKey']
-        barkKey = config['barkKey']
-        follows = config['follow']
-        maxMintNum = int(config['maxMintNum'])
+        RPC, privateKeys, scanApikey, blacklist = config['RPC'], config['privateKey'], config['scanApikey'], config['blacklist']
+        blocknativeKey, alchemyKey, barkKey, follows = config['blocknativeKey'], config['alchemyKey'], config['barkKey'], config['follow']
         follows = dict((k.lower(), v) for k, v in follows.items())
         nameabi = {
-            'inputs': [],
-            'name': 'name',
+            'inputs': [], 'name': 'name',
             'outputs': [{'internalType': 'string', 'name': '', 'type': 'string'}],
-            'stateMutability': 'view',
-            'type': 'function'
+            'stateMutability': 'view', 'type': 'function'
         }
         w3 = Web3(Web3.HTTPProvider(RPC))
-        maxGasPrice = config['maxGasPrice']
+        maxGasPrice, maxGasLimit, maxValue, maxMintNum = config['maxGasPrice'], int(config['maxGasLimit']), config['maxValue'], int(config['maxMintNum'])
         maxGasPrice = w3.toWei(maxGasPrice, 'gwei')
-        maxGasLimit = int(config['maxGasLimit'])
         maxValue = w3.toWei(maxValue, 'ether')
         chainId = w3.eth.chainId
         accounts = [w3.eth.account.privateKeyToAccount(privateKey) for privateKey in privateKeys]
         mintadd = []
         ETHPrice = getETHPrice()
         print_color('ETH单价: ' + str(ETHPrice), 'green')
-        methodNameDict = {
-            '0xab834bab': {'method': 'atomicMatch_', 'isMint': False},
-            '0xa22cb465': {'method': 'setApprovalForAll', 'isMint': False},
-            '0x23b872dd': {'method': 'transferFrom', 'isMint': False},
-            '0xa8a41c70': {'method': 'cancelOrder_', 'isMint': False}
-        }
+        methodNameDict = {}
         if len(blocknativeKey) >= 20:
             asyncio.run(blocknative())
         elif len(alchemyKey) >= 20:
